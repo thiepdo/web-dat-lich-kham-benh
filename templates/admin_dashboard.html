@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Quản Trị - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="#">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Trị</div><div style="font-size:11px;color:#64748b">Quản trị viên</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Quản trị viên</div></div>
+    <a href="{{ url_for('logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="page-header"><h1>Dashboard Quản Trị</h1><p>Quản lý toàn bộ hệ thống</p></div>
+  <div class="tabs">
+    <a class="tab active" href="{{ url_for('admin_dashboard') }}">🏠 Tổng quan</a>
+    <a class="tab" href="{{ url_for('admin_doctors') }}">👨‍⚕️ Bác sĩ <span style="background:#2563eb;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px">{{ doctor_count }}</span></a>
+    <a class="tab" href="{{ url_for('admin_patients') }}">👥 Bệnh nhân <span style="background:#16a34a;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px">{{ patient_count }}</span></a>
+    <a class="tab" href="{{ url_for('admin_specialties') }}">🏥 Chuyên khoa <span style="background:#ea580c;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px">{{ specialty_count }}</span></a>
+    <a class="tab" href="{{ url_for('admin_appointments') }}">📅 Lịch khám <span style="background:#7c3aed;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px">{{ appt_count }}</span></a>
+  </div>
+  <div class="card">
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:20px">Tổng quan hệ thống</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
+      <div style="background:#2563eb;border-radius:14px;padding:20px;color:#fff;text-align:center">
+        <div style="font-size:28px;margin-bottom:6px">👨‍⚕️</div>
+        <div style="font-size:32px;font-weight:800">{{ doctor_count }}</div>
+        <div style="font-size:14px;opacity:.9">Bác sĩ</div>
+      </div>
+      <div style="background:#16a34a;border-radius:14px;padding:20px;color:#fff;text-align:center">
+        <div style="font-size:28px;margin-bottom:6px">👥</div>
+        <div style="font-size:32px;font-weight:800">{{ patient_count }}</div>
+        <div style="font-size:14px;opacity:.9">Bệnh nhân</div>
+      </div>
+      <div style="background:#7c3aed;border-radius:14px;padding:20px;color:#fff;text-align:center">
+        <div style="font-size:28px;margin-bottom:6px">📅</div>
+        <div style="font-size:32px;font-weight:800">{{ appt_count }}</div>
+        <div style="font-size:14px;opacity:.9">Lịch khám</div>
+      </div>
+      <div style="background:#ea580c;border-radius:14px;padding:20px;color:#fff;text-align:center">
+        <div style="font-size:28px;margin-bottom:6px">🏥</div>
+        <div style="font-size:32px;font-weight:800">{{ specialty_count }}</div>
+        <div style="font-size:14px;opacity:.9">Chuyên khoa</div>
+      </div>
+    </div>
+    {% if pending_count > 0 %}
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:24px">📅</span>
+      <div>
+        <div style="font-weight:700;color:#92400e">{{ pending_count }} lịch khám đang chờ xác nhận</div>
+        <div style="font-size:13px;color:#a16207">Cần được bác sĩ xác nhận</div>
+      </div>
+      <a href="{{ url_for('admin_appointments') }}" class="btn btn-warning btn-sm" style="margin-left:auto">Xem ngay</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">Lịch khám gần đây</h3>
+    {% if recent_appts %}
+    <table>
+      <thead><tr><th>Bệnh nhân</th><th>Bác sĩ</th><th>Ngày khám</th><th>Giờ</th><th>Trạng thái</th></tr></thead>
+      <tbody>
+      {% for a in recent_appts %}
+      <tr>
+        <td>{{ a.ten_bn }}</td><td>{{ a.ten_bs }}</td><td>{{ a.ngay_kham }}</td><td>{{ a.gio_kham }}</td>
+        <td>{% if a.trang_thai=='cho_xac_nhan'%}<span class="badge badge-pending">Chờ XN</span>
+            {% elif a.trang_thai=='da_xac_nhan'%}<span class="badge badge-confirmed">Đã XN</span>
+            {% elif a.trang_thai=='hoan_thanh'%}<span class="badge badge-completed">Hoàn thành</span>
+            {% else %}<span class="badge badge-cancelled">Đã hủy</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><div class="icon">📋</div><p>Chưa có lịch khám nào</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

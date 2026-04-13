@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Quản lý Bệnh Nhân - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('admin_dashboard') }}">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Trị</div><div style="font-size:11px;color:#64748b">Quản trị viên</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Quản trị viên</div></div>
+    <a href="{{ url_for('logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="tabs">
+    <a class="tab" href="{{ url_for('admin_dashboard') }}">🏠 Tổng quan</a>
+    <a class="tab" href="{{ url_for('admin_doctors') }}">👨‍⚕️ Bác sĩ</a>
+    <a class="tab active" href="{{ url_for('admin_patients') }}">👥 Bệnh nhân</a>
+    <a class="tab" href="{{ url_for('admin_specialties') }}">🏥 Chuyên khoa</a>
+    <a class="tab" href="{{ url_for('admin_appointments') }}">📅 Lịch khám</a>
+  </div>
+  <div style="margin-bottom:20px"><h2 style="font-size:20px;font-weight:700">Danh sách Bệnh Nhân</h2></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>Họ tên</th><th>Tên đăng nhập</th><th>Email</th><th>SĐT</th><th>Ngày sinh</th><th>Địa chỉ</th><th>Trạng thái</th></tr></thead>
+      <tbody>
+      {% for p in patients %}
+      <tr>
+        <td><strong>{{ p.ho_ten }}</strong></td>
+        <td><code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">{{ p.ten_dang_nhap }}</code></td>
+        <td>{{ p.email or '-' }}</td>
+        <td>{{ p.so_dien_thoai or '-' }}</td>
+        <td>{{ p.ngay_sinh or '-' }}</td>
+        <td>{{ p.dia_chi or '-' }}</td>
+        <td>{% if p.tk_trang_thai %}<span class="badge badge-completed">Hoạt động</span>{% else %}<span class="badge badge-cancelled">Vô hiệu</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:32px">Chưa có bệnh nhân nào</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
