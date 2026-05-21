@@ -1,0 +1,88 @@
+{% extends 'shared/base.html' %}
+{% block title %}Quản lý Lịch Khám - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('web_admin.dashboard') }}">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Trị</div><div style="font-size:11px;color:#64748b">Quản trị viên</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Quản trị viên</div></div>
+    <a href="{{ url_for('web_public.logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="tabs">
+    <a class="tab" href="{{ url_for('web_admin.dashboard') }}">🏠 Tổng quan</a>
+    <a class="tab" href="{{ url_for('web_admin.doctors') }}">👨‍⚕️ Bác sĩ</a>
+    <a class="tab" href="{{ url_for('web_admin.patients') }}">👥 Bệnh nhân</a>
+    <a class="tab" href="{{ url_for('web_admin.specialties') }}">🏥 Chuyên khoa</a>
+    <a class="tab active" href="{{ url_for('web_admin.appointments') }}">📅 Lịch khám</a>
+    <a class="tab" href="{{ url_for('web_admin.revenue') }}">💰 Doanh thu</a>
+  </div>
+  <div style="margin-bottom:16px">
+    <h2 style="font-size:20px;font-weight:700">Danh sách Lịch Khám</h2>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Tìm kiếm theo tên bệnh nhân, bác sĩ..." oninput="filterTable()" style="flex:1">
+    <select id="statusFilter" onchange="filterTable()">
+      <option value="">Tất cả trạng thái</option>
+      <option value="cho_xac_nhan">Chờ xác nhận</option>
+      <option value="da_xac_nhan">Đã xác nhận</option>
+      <option value="hoan_thanh">Hoàn thành</option>
+      <option value="da_huy">Đã hủy</option>
+    </select>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table id="apptTable">
+      <thead><tr><th>#</th><th>Bệnh nhân</th><th>Bác sĩ</th><th>Chuyên khoa</th><th>Ngày khám</th><th>Giờ</th><th>Phí</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+      <tbody>
+      {% for a in appointments %}
+      <tr data-status="{{ a.trang_thai }}">
+        <td>#{{ a.id }}</td>
+        <td>{{ a.ten_bn }}</td>
+        <td>{{ a.ten_bs }}</td>
+        <td>{{ a.ten_chuyen_khoa }}</td>
+        <td>{{ a.ngay_kham }}</td>
+        <td>{{ a.gio_kham }}</td>
+        <td>{{ "{:,.0f}".format(a.phi_kham) }}đ</td>
+        <td>
+          {% if a.trang_thai=='cho_xac_nhan'%}<span class="badge badge-pending">Chờ XN</span>
+          {% elif a.trang_thai=='da_xac_nhan'%}<span class="badge badge-confirmed">Đã XN</span>
+          {% elif a.trang_thai=='hoan_thanh'%}<span class="badge badge-completed">Hoàn thành</span>
+          {% else %}<span class="badge badge-cancelled">Đã hủy</span>{% endif %}
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('web_admin.update_appointment', lk_id=a.id) }}" style="display:flex;gap:4px">
+            <select class="form-control" name="trang_thai" style="padding:5px 8px;font-size:12px;width:120px">
+              <option value="cho_xac_nhan" {% if a.trang_thai=='cho_xac_nhan' %}selected{% endif %}>Chờ XN</option>
+              <option value="da_xac_nhan" {% if a.trang_thai=='da_xac_nhan' %}selected{% endif %}>Đã XN</option>
+              <option value="hoan_thanh" {% if a.trang_thai=='hoan_thanh' %}selected{% endif %}>HT</option>
+              <option value="da_huy" {% if a.trang_thai=='da_huy' %}selected{% endif %}>Hủy</option>
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Lưu</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:32px">Chưa có lịch khám nào</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+function filterTable(){
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const s = document.getElementById('statusFilter').value;
+  document.querySelectorAll('#apptTable tbody tr').forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const status = row.dataset.status || '';
+    row.style.display = (text.includes(q) && (!s || status===s)) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

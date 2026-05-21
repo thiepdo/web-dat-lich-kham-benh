@@ -1,0 +1,692 @@
+{% extends 'shared/base.html' %}
+{% block title %}Thống kê doanh thu - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('web_admin.dashboard') }}">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Trị</div><div style="font-size:11px;color:#64748b">Quản trị viên</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Quản trị viên</div></div>
+    <a href="{{ url_for('web_public.logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<style>
+.filter-panel{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:20px 24px;margin-bottom:22px}
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:14px}
+.fg label{display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:5px;letter-spacing:.4px;text-transform:uppercase}
+.fg input,.fg select{width:100%;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#1e293b;background:#fff;box-sizing:border-box}
+.fg input:focus,.fg select:focus{outline:none;border-color:#2563eb}
+.sum-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.sum-card{border-radius:12px;padding:16px 18px;text-align:center}
+.sum-card .lbl{font-size:11px;font-weight:700;letter-spacing:.5px;opacity:.8;margin-bottom:5px}
+.sum-card .val{font-size:21px;font-weight:800}
+.sum-card .sub{font-size:11px;opacity:.7;margin-top:3px}
+.sort-btn{cursor:pointer;user-select:none;white-space:nowrap}
+.sort-btn::after{content:' ↕';color:#94a3b8;font-size:10px}
+.sort-btn.asc::after{content:' ↑';color:#2563eb}
+.sort-btn.desc::after{content:' ↓';color:#2563eb}
+.paging{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.paging button{padding:5px 11px;border:1.5px solid #e2e8f0;border-radius:7px;background:#fff;font-size:13px;cursor:pointer}
+.paging button.ap{background:#2563eb;color:#fff;border-color:#2563eb}
+.paging button:hover:not(.ap){border-color:#2563eb;color:#2563eb}
+.inv-row:hover td{background:#f0f9ff}
+.qtag{display:inline-flex;align-items:center;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;border:1.5px solid transparent;cursor:pointer}
+</style>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div class="page-header" style="margin-bottom:0"><h1>💰 Thống kê Doanh thu</h1><p>Lọc, phân tích và xuất báo cáo hóa đơn</p></div>
+    <button onclick="exportCSV()" class="btn btn-outline btn-sm">⬇️ Xuất CSV</button>
+  </div>
+  <div class="tabs">
+    <a class="tab" href="{{ url_for('web_admin.dashboard') }}">🏠 Tổng quan</a>
+    <a class="tab" href="{{ url_for('web_admin.doctors') }}">👨‍⚕️ Bác sĩ</a>
+    <a class="tab" href="{{ url_for('web_admin.patients') }}">👥 Bệnh nhân</a>
+    <a class="tab" href="{{ url_for('web_admin.specialties') }}">🏥 Chuyên khoa</a>
+    <a class="tab" href="{{ url_for('web_admin.appointments') }}">📅 Lịch khám</a>
+    <a class="tab active" href="{{ url_for('web_admin.revenue') }}">💰 Doanh thu</a>
+  </div>
+
+  <!-- Thẻ tổng hệ thống -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+    <div style="background:linear-gradient(135deg,#16a34a,#15803d);border-radius:14px;padding:20px;color:#fff;text-align:center">
+      <div style="font-size:11px;opacity:.8;margin-bottom:5px;letter-spacing:.5px">TỔNG DOANH THU (Toàn HT)</div>
+      <div style="font-size:26px;font-weight:800">{{ "{:,.0f}".format(overview.tong_doanh_thu or 0) }}đ</div>
+      <div style="font-size:11px;opacity:.7;margin-top:3px">{{ overview.so_da_thanh_toan or 0 }} hóa đơn đã thu</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#ea580c,#c2410c);border-radius:14px;padding:20px;color:#fff;text-align:center">
+      <div style="font-size:11px;opacity:.8;margin-bottom:5px;letter-spacing:.5px">CHỜ THANH TOÁN (Toàn HT)</div>
+      <div style="font-size:26px;font-weight:800">{{ "{:,.0f}".format(overview.cho_thanh_toan or 0) }}đ</div>
+      <div style="font-size:11px;opacity:.7;margin-top:3px">{{ overview.so_cho_tt or 0 }} hóa đơn chưa thu</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);border-radius:14px;padding:20px;color:#fff;text-align:center">
+      <div style="font-size:11px;opacity:.8;margin-bottom:5px;letter-spacing:.5px">TỔNG HÓA ĐƠN</div>
+      <div style="font-size:26px;font-weight:800">{{ overview.tong_hoa_don or 0 }}</div>
+      <div style="font-size:11px;opacity:.7;margin-top:3px">Toàn bộ trong hệ thống</div>
+    </div>
+  </div>
+
+  <!-- ===== BIỂU ĐỒ DOANH SỐ ===== -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+  .charts-section { margin-bottom: 24px; }
+  .chart-tabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .chart-tab { padding:7px 18px; border-radius:20px; border:1.5px solid #e2e8f0; background:#fff; font-size:13px; font-weight:600; cursor:pointer; color:#64748b; transition:all .2s; }
+  .chart-tab.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .chart-tab:hover:not(.active) { border-color:#2563eb; color:#2563eb; }
+  .chart-panel { display:none; animation: fadeIn .3s ease; }
+  .chart-panel.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  .chart-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .chart-card { background:#fff; border:1.5px solid #e2e8f0; border-radius:16px; padding:22px; }
+  .chart-card h4 { font-size:14px; font-weight:700; color:#1e293b; margin:0 0 16px 0; display:flex; align-items:center; gap:7px; }
+  .chart-canvas-wrap { position:relative; width:100%; }
+  @media(max-width:700px){ .chart-grid-2{grid-template-columns:1fr} }
+  </style>
+
+  <div class="charts-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="font-size:16px;font-weight:800;color:#1e293b;margin:0">📊 Biểu đồ Doanh số</h3>
+      <div class="chart-tabs">
+        <button class="chart-tab active" onclick="switchTab('tab-trend',this)">📈 Xu hướng</button>
+        <button class="chart-tab" onclick="switchTab('tab-specialty',this)">🏥 Chuyên khoa</button>
+        <button class="chart-tab" onclick="switchTab('tab-doctor',this)">👨‍⚕️ Bác sĩ</button>
+      </div>
+    </div>
+
+    <!-- Tab 1: Doanh thu theo tháng (Line + Bar combo) -->
+    <div id="tab-trend" class="chart-panel active">
+      <div class="chart-card">
+        <h4>📅 Doanh thu 12 tháng gần nhất</h4>
+        <div class="chart-canvas-wrap" style="height:300px">
+          <canvas id="chartMonthly"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Chuyên khoa -->
+    <div id="tab-specialty" class="chart-panel">
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <h4>🍩 Tỷ trọng doanh thu theo chuyên khoa</h4>
+          <div class="chart-canvas-wrap" style="height:280px">
+            <canvas id="chartSpecialtyDonut"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h4>📊 So sánh số ca &amp; doanh thu</h4>
+          <div class="chart-canvas-wrap" style="height:280px">
+            <canvas id="chartSpecialtyBar"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Bác sĩ -->
+    <div id="tab-doctor" class="chart-panel">
+      <div class="chart-card">
+        <h4>🏆 Top bác sĩ theo doanh thu</h4>
+        <div class="chart-canvas-wrap" style="height:{{ [by_doctor|length * 45, 260]|max }}px">
+          <canvas id="chartDoctorBar"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ---- Dữ liệu từ server ----
+  const monthlyData = {
+    labels: {{ monthly | map(attribute='thang') | list | tojson }},
+    revenue: {{ monthly | map(attribute='doanh_thu') | list | tojson }},
+    invoices: {{ monthly | map(attribute='so_hoa_don') | list | tojson }}
+  };
+  const specialtyData = {
+    labels: {{ by_specialty | map(attribute='ten_chuyen_khoa') | list | tojson }},
+    revenue: {{ by_specialty | map(attribute='doanh_thu') | list | tojson }},
+    cases: {{ by_specialty | map(attribute='so_ca') | list | tojson }}
+  };
+  const doctorData = {
+    labels: {{ by_doctor | map(attribute='ten_bs') | list | tojson }},
+    revenue: {{ by_doctor | map(attribute='doanh_thu') | list | tojson }},
+    cases: {{ by_doctor | map(attribute='so_ca') | list | tojson }}
+  };
+
+  // ---- Màu sắc ----
+  const PALETTE = ['#2563eb','#16a34a','#ea580c','#7c3aed','#0891b2','#db2777','#ca8a04','#065f46','#1e40af','#9f1239'];
+  const fmtVND = v => (v||0).toLocaleString('vi-VN') + 'đ';
+
+  const tooltipPlugin = {
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const ds = ctx.dataset;
+            if (ds.yAxisID === 'yRev' || ds.type === 'line' || ctx.chart.config.type === 'bar' || ctx.chart.config.type === 'doughnut') {
+              if (ds.label && (ds.label.includes('Doanh thu') || ds.label.includes('đ') || ctx.chart.config.type === 'doughnut')) {
+                return ' ' + ds.label + ': ' + fmtVND(ctx.parsed.y ?? ctx.parsed);
+              }
+            }
+            return ' ' + ds.label + ': ' + (ctx.parsed.y ?? ctx.parsed.x ?? ctx.parsed);
+          }
+        }
+      }
+    }
+  };
+
+  // ---- Chart 1: Monthly (Line + Bar) ----
+  (function() {
+    const labels = [...monthlyData.labels].reverse();
+    const rev    = [...monthlyData.revenue].reverse();
+    const inv    = [...monthlyData.invoices].reverse();
+    if (!labels.length) return;
+    const ctx = document.getElementById('chartMonthly').getContext('2d');
+    new Chart(ctx, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Số hóa đơn',
+            data: inv,
+            backgroundColor: 'rgba(124,58,237,0.18)',
+            borderColor: '#7c3aed',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            yAxisID: 'yInv',
+            order: 2
+          },
+          {
+            type: 'line',
+            label: 'Doanh thu (đ)',
+            data: rev,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,0.10)',
+            borderWidth: 3,
+            pointBackgroundColor: '#2563eb',
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            fill: true,
+            tension: 0.42,
+            yAxisID: 'yRev',
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                if (ctx.dataset.label.includes('Doanh thu')) return ' Doanh thu: ' + fmtVND(ctx.parsed.y);
+                return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y;
+              }
+            }
+          }
+        },
+        scales: {
+          yRev: { type:'linear', position:'left', ticks: { callback: v => (v/1e6).toFixed(1)+'tr' }, grid: { color:'rgba(0,0,0,.05)' } },
+          yInv: { type:'linear', position:'right', ticks: { stepSize:1 }, grid: { display:false } },
+          x: { grid: { display:false } }
+        }
+      }
+    });
+  })();
+
+  // ---- Chart 2a: Specialty Donut ----
+  (function() {
+    if (!specialtyData.labels.length) return;
+    const ctx = document.getElementById('chartSpecialtyDonut').getContext('2d');
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: specialtyData.labels,
+        datasets: [{
+          data: specialtyData.revenue,
+          backgroundColor: PALETTE,
+          borderWidth: 3,
+          borderColor: '#fff',
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: { position: 'bottom', labels: { padding: 14, font: { size: 12 } } },
+          tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmtVND(ctx.parsed) } }
+        }
+      }
+    });
+  })();
+
+  // ---- Chart 2b: Specialty Bar ----
+  (function() {
+    if (!specialtyData.labels.length) return;
+    const ctx = document.getElementById('chartSpecialtyBar').getContext('2d');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: specialtyData.labels,
+        datasets: [
+          {
+            label: 'Số ca',
+            data: specialtyData.cases,
+            backgroundColor: 'rgba(22,163,74,0.75)',
+            borderRadius: 5,
+            yAxisID: 'yCases'
+          },
+          {
+            label: 'Doanh thu (đ)',
+            data: specialtyData.revenue,
+            backgroundColor: 'rgba(37,99,235,0.75)',
+            borderRadius: 5,
+            yAxisID: 'yRev'
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label.includes('đ') ? ' DT: '+fmtVND(ctx.parsed.y) : ' Số ca: '+ctx.parsed.y } }
+        },
+        scales: {
+          yCases: { type:'linear', position:'left', ticks: { stepSize:1 }, grid: { color:'rgba(0,0,0,.05)' } },
+          yRev:   { type:'linear', position:'right', ticks: { callback: v => (v/1e6).toFixed(1)+'tr' }, grid: { display:false } },
+          x: { grid: { display:false } }
+        }
+      }
+    });
+  })();
+
+  // ---- Chart 3: Doctor Horizontal Bar ----
+  (function() {
+    if (!doctorData.labels.length) return;
+    const ctx = document.getElementById('chartDoctorBar').getContext('2d');
+    const limit = 10;
+    const labels = doctorData.labels.slice(0, limit);
+    const rev    = doctorData.revenue.slice(0, limit);
+    const cases  = doctorData.cases.slice(0, limit);
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Doanh thu (đ)',
+          data: rev,
+          backgroundColor: labels.map((_,i) => PALETTE[i % PALETTE.length] + 'cc'),
+          borderColor:      labels.map((_,i) => PALETTE[i % PALETTE.length]),
+          borderWidth: 1.5,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ' ' + fmtVND(ctx.parsed.x) } }
+        },
+        scales: {
+          x: { ticks: { callback: v => (v/1e6).toFixed(1)+'tr' }, grid: { color:'rgba(0,0,0,.05)' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  })();
+
+  // ---- Tab switching ----
+  function switchTab(id, btn) {
+    document.querySelectorAll('.chart-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+  </script>
+
+  <!-- Theo bác sĩ -->
+  <div class="card">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:14px">👨‍⚕️ Doanh thu theo bác sĩ</h3>
+    {% if by_doctor %}
+    {% set total_rev = by_doctor|map(attribute='doanh_thu')|sum %}
+    <table>
+      <thead><tr><th>Bác sĩ</th><th>Chuyên khoa</th><th style="text-align:right">Số ca</th><th style="text-align:right">Doanh thu</th><th style="min-width:120px">Tỷ lệ</th></tr></thead>
+      <tbody>
+      {% for d in by_doctor %}
+      <tr>
+        <td><strong>{{ d.ten_bs }}</strong></td>
+        <td><span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:6px;font-size:12px">{{ d.ten_chuyen_khoa }}</span></td>
+        <td style="text-align:right">{{ d.so_ca }}</td>
+        <td style="text-align:right;color:#16a34a;font-weight:700">{{ "{:,.0f}".format(d.doanh_thu or 0) }}đ</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:7px">
+            <div style="flex:1;background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden">
+              <div style="background:#16a34a;height:100%;width:{{ (d.doanh_thu/total_rev*100)|int if total_rev else 0 }}%;border-radius:4px"></div>
+            </div>
+            <span style="font-size:12px;color:#64748b;white-space:nowrap">{{ "%.0f"|format(d.doanh_thu/total_rev*100) if total_rev else 0 }}%</span>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><div class="icon">👨‍⚕️</div><p>Chưa có dữ liệu</p></div>
+    {% endif %}
+  </div>
+
+  <!-- ===== BỘ LỌC HÓA ĐƠN ===== -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 style="font-size:15px;font-weight:700;margin:0">🔍 Tra cứu & Lọc hóa đơn</h3>
+      {% if filters.trang_thai or filters.tu_ngay or filters.den_ngay or filters.bac_si_id or filters.chuyen_khoa_id or filters.ten_bn or filters.so_tien_min or filters.so_tien_max %}
+      <a href="{{ url_for('web_admin.revenue') }}" class="btn btn-outline btn-sm">✕ Xóa bộ lọc</a>
+      {% endif %}
+    </div>
+
+    <!-- Nút lọc nhanh -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <a href="{{ url_for('web_admin.revenue') }}" class="qtag" style="background:{{ '#2563eb' if not filters.trang_thai else '#f1f5f9' }};color:{{ '#fff' if not filters.trang_thai else '#475569' }};border-color:{{ '#2563eb' if not filters.trang_thai else '#e2e8f0' }}">📋 Tất cả</a>
+      <a href="?trang_thai=da_thanh_toan" class="qtag" style="background:{{ '#16a34a' if filters.trang_thai=='da_thanh_toan' else '#dcfce7' }};color:{{ '#fff' if filters.trang_thai=='da_thanh_toan' else '#166534' }};border-color:{{ '#16a34a' if filters.trang_thai=='da_thanh_toan' else '#bbf7d0' }}">✅ Đã thanh toán <span style="margin-left:4px;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;font-size:11px">{{ overview.so_da_thanh_toan or 0 }}</span></a>
+      <a href="?trang_thai=cho_thanh_toan" class="qtag" style="background:{{ '#ea580c' if filters.trang_thai=='cho_thanh_toan' else '#ffedd5' }};color:{{ '#fff' if filters.trang_thai=='cho_thanh_toan' else '#9a3412' }};border-color:{{ '#ea580c' if filters.trang_thai=='cho_thanh_toan' else '#fed7aa' }}">⏳ Chờ thanh toán <span style="margin-left:4px;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;font-size:11px">{{ overview.so_cho_tt or 0 }}</span></a>
+      <a href="?trang_thai=da_huy" class="qtag" style="background:{{ '#dc2626' if filters.trang_thai=='da_huy' else '#fee2e2' }};color:{{ '#fff' if filters.trang_thai=='da_huy' else '#991b1b' }};border-color:{{ '#dc2626' if filters.trang_thai=='da_huy' else '#fca5a5' }}">❌ Đã hủy</a>
+    </div>
+
+    <!-- Form lọc nâng cao -->
+    <form method="GET" action="{{ url_for('web_admin.revenue') }}">
+      <div class="filter-panel">
+        <div style="font-size:12px;font-weight:700;color:#2563eb;margin-bottom:12px;letter-spacing:.3px">⚙️ BỘ LỌC NÂNG CAO</div>
+        <div class="filter-grid">
+          <div class="fg">
+            <label>Trạng thái</label>
+            <select name="trang_thai">
+              <option value="">-- Tất cả --</option>
+              <option value="da_thanh_toan" {{ 'selected' if filters.trang_thai=='da_thanh_toan' }}>✅ Đã thanh toán</option>
+              <option value="cho_thanh_toan" {{ 'selected' if filters.trang_thai=='cho_thanh_toan' }}>⏳ Chờ thanh toán</option>
+              <option value="da_huy" {{ 'selected' if filters.trang_thai=='da_huy' }}>❌ Đã hủy</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Từ ngày (ngày khám)</label>
+            <input type="date" name="tu_ngay" value="{{ filters.tu_ngay }}">
+          </div>
+          <div class="fg">
+            <label>Đến ngày (ngày khám)</label>
+            <input type="date" name="den_ngay" value="{{ filters.den_ngay }}">
+          </div>
+          <div class="fg">
+            <label>Bác sĩ</label>
+            <select name="bac_si_id">
+              <option value="">-- Tất cả bác sĩ --</option>
+              {% for d in all_doctors %}
+              <option value="{{ d.id }}" {{ 'selected' if filters.bac_si_id == d.id|string }}>{{ d.ho_ten }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="fg">
+            <label>Chuyên khoa</label>
+            <select name="chuyen_khoa_id">
+              <option value="">-- Tất cả CK --</option>
+              {% for ck in all_specialties %}
+              <option value="{{ ck.id }}" {{ 'selected' if filters.chuyen_khoa_id == ck.id|string }}>{{ ck.ten_chuyen_khoa }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="fg">
+            <label>Tên bệnh nhân</label>
+            <input type="text" name="ten_bn" value="{{ filters.ten_bn }}" placeholder="Nhập tên...">
+          </div>
+          <div class="fg">
+            <label>Số tiền tối thiểu (đ)</label>
+            <input type="number" name="so_tien_min" value="{{ filters.so_tien_min }}" placeholder="VD: 100000" min="0">
+          </div>
+          <div class="fg">
+            <label>Số tiền tối đa (đ)</label>
+            <input type="number" name="so_tien_max" value="{{ filters.so_tien_max }}" placeholder="VD: 500000" min="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+          <a href="{{ url_for('web_admin.revenue') }}" class="btn btn-outline btn-sm">Đặt lại</a>
+          <button type="submit" class="btn btn-primary btn-sm">🔍 Áp dụng bộ lọc</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Thanh tổng kết theo bộ lọc hiện tại -->
+    <div class="sum-bar">
+      <div class="sum-card" style="background:#dcfce7;color:#166534">
+        <div class="lbl">ĐÃ THANH TOÁN</div>
+        <div class="val" id="sum-paid">{{ "{:,.0f}".format(filtered_summary.da_thu or 0) }}đ</div>
+        <div class="sub">kết quả đang lọc</div>
+      </div>
+      <div class="sum-card" style="background:#ffedd5;color:#9a3412">
+        <div class="lbl">CHƯA THANH TOÁN</div>
+        <div class="val" id="sum-pending">{{ "{:,.0f}".format(filtered_summary.chua_thu or 0) }}đ</div>
+        <div class="sub">kết quả đang lọc</div>
+      </div>
+      <div class="sum-card" style="background:#dbeafe;color:#1e40af">
+        <div class="lbl">TỔNG TẤT CẢ</div>
+        <div class="val" id="sum-total">{{ "{:,.0f}".format(filtered_summary.tong_tat_ca or 0) }}đ</div>
+        <div class="sub">kết quả đang lọc</div>
+      </div>
+      <div class="sum-card" style="background:#f3e8ff;color:#6b21a8">
+        <div class="lbl">SỐ HÓA ĐƠN</div>
+        <div class="val" id="sum-count">{{ filtered_summary.so_hoa_don or 0 }}</div>
+        <div class="sub">hiển thị: <span id="vis-count">{{ invoices|length }}</span></div>
+      </div>
+    </div>
+
+    {% if invoices %}
+    <!-- Tìm kiếm nhanh trong kết quả -->
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="qsearch" type="text" placeholder="🔍 Tìm nhanh trong kết quả (theo tên bệnh nhân, bác sĩ)..."
+        style="flex:1;min-width:220px;padding:9px 13px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px">
+      <select id="qstatus" style="padding:9px 13px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;background:#fff">
+        <option value="">Tất cả trạng thái</option>
+        <option value="da_thanh_toan">✅ Đã thanh toán</option>
+        <option value="cho_thanh_toan">⏳ Chờ thanh toán</option>
+        <option value="da_huy">❌ Đã hủy</option>
+      </select>
+    </div>
+
+    <!-- Bảng hóa đơn -->
+    <div style="overflow-x:auto;border-radius:10px;border:1.5px solid #e2e8f0">
+      <table id="inv-table" style="margin:0">
+        <thead>
+          <tr>
+            <th><span class="sort-btn" data-col="0">#</span></th>
+            <th><span class="sort-btn" data-col="1">Bệnh nhân</span></th>
+            <th><span class="sort-btn" data-col="2">Bác sĩ</span></th>
+            <th><span class="sort-btn" data-col="3">Ngày khám</span></th>
+            <th style="text-align:right"><span class="sort-btn" data-col="4">Số tiền</span></th>
+            <th><span class="sort-btn" data-col="5">Trạng thái</span></th>
+            <th>Hình thức TT</th>
+            <th><span class="sort-btn" data-col="7">Ngày TT</span></th>
+          </tr>
+        </thead>
+        <tbody id="inv-body">
+        {% for hd in invoices %}
+        <tr class="inv-row"
+            data-status="{{ hd.trang_thai }}"
+            data-amount="{{ hd.so_tien }}"
+            data-ngay="{{ hd.ngay_kham }}"
+            data-bn="{{ hd.ten_bn|lower }}"
+            data-bs="{{ hd.ten_bs|lower }}">
+          <td style="color:#94a3b8;font-size:12px;white-space:nowrap">#{{ hd.id }}</td>
+          <td><strong>{{ hd.ten_bn }}</strong></td>
+          <td>
+            <span style="font-weight:600">{{ hd.ten_bs }}</span><br>
+            <span style="font-size:11px;color:#94a3b8">{{ hd.ten_chuyen_khoa }}</span>
+          </td>
+          <td style="white-space:nowrap">
+            {{ hd.ngay_kham }}<br>
+            <span style="color:#94a3b8;font-size:12px">{{ hd.gio_kham }}</span>
+          </td>
+          <td style="text-align:right;white-space:nowrap">
+            <span style="font-weight:800;font-size:14px;color:{% if hd.trang_thai=='da_thanh_toan' %}#16a34a{% elif hd.trang_thai=='cho_thanh_toan' %}#ea580c{% else %}#94a3b8{% endif %}">
+              {{ "{:,.0f}".format(hd.so_tien) }}đ
+            </span>
+          </td>
+          <td>
+            {% if hd.trang_thai == 'da_thanh_toan' %}
+              <span class="badge badge-completed">✅ Đã TT</span>
+            {% elif hd.trang_thai == 'cho_thanh_toan' %}
+              <span class="badge badge-pending">⏳ Chờ TT</span>
+            {% else %}
+              <span class="badge badge-cancelled">❌ Đã hủy</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:#475569">
+            {% if hd.phuong_thuc_thanh_toan == 'tien_mat' %}💵 Tiền mặt
+            {% elif hd.phuong_thuc_thanh_toan == 'chuyen_khoan' %}🏦 Chuyển khoản
+            {% else %}{{ hd.phuong_thuc_thanh_toan or '—' }}{% endif %}
+          </td>
+          <td style="font-size:12px;color:#64748b;white-space:nowrap">
+            {{ hd.ngay_thanh_toan[:16] if hd.ngay_thanh_toan else '—' }}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="paging" id="paging-bar"></div>
+
+    {% else %}
+    <div class="empty-state" style="padding:40px 0">
+      <div class="icon">🧾</div>
+      <p>Không tìm thấy hóa đơn nào phù hợp với bộ lọc</p>
+      <a href="{{ url_for('web_admin.revenue') }}" class="btn btn-outline btn-sm" style="margin-top:12px">Xóa bộ lọc</a>
+    </div>
+    {% endif %}
+  </div><!-- /card -->
+</div><!-- /container -->
+
+<script>
+const PAGE = 20;
+let sortCol = -1, sortDir = 1;
+let allRows = [], filtered = [];
+let curPage = 1;
+
+function init() {
+  allRows = Array.from(document.querySelectorAll('.inv-row'));
+  filtered = [...allRows];
+  addListeners();
+  render();
+}
+
+function addListeners() {
+  const qs = document.getElementById('qsearch');
+  const st = document.getElementById('qstatus');
+  if (qs) qs.addEventListener('input', () => { applyFilter(); });
+  if (st) st.addEventListener('change', () => { applyFilter(); });
+  document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => doSort(parseInt(btn.dataset.col)));
+  });
+}
+
+function applyFilter() {
+  const q  = (document.getElementById('qsearch')?.value || '').toLowerCase();
+  const st = document.getElementById('qstatus')?.value || '';
+  filtered = allRows.filter(r => {
+    const mq = !q || r.dataset.bn.includes(q) || r.dataset.bs.includes(q);
+    const ms = !st || r.dataset.status === st;
+    return mq && ms;
+  });
+  curPage = 1;
+  updateSummary();
+  render();
+}
+
+function updateSummary() {
+  let paid = 0, pend = 0, tot = 0;
+  filtered.forEach(r => {
+    const a = parseInt(r.dataset.amount || 0);
+    tot += a;
+    if (r.dataset.status === 'da_thanh_toan') paid += a;
+    else if (r.dataset.status === 'cho_thanh_toan') pend += a;
+  });
+  const f = n => n.toLocaleString('vi-VN') + 'đ';
+  document.getElementById('sum-paid').textContent    = f(paid);
+  document.getElementById('sum-pending').textContent = f(pend);
+  document.getElementById('sum-total').textContent   = f(tot);
+  document.getElementById('sum-count').textContent   = filtered.length;
+  const vc = document.getElementById('vis-count');
+  if (vc) vc.textContent = filtered.length;
+}
+
+function doSort(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = 1; }
+  document.querySelectorAll('.sort-btn').forEach(b => {
+    b.classList.remove('asc','desc');
+    if (parseInt(b.dataset.col) === col) b.classList.add(sortDir===1?'asc':'desc');
+  });
+  filtered.sort((a, b) => {
+    if (col === 4) return (parseInt(a.dataset.amount||0) - parseInt(b.dataset.amount||0)) * sortDir;
+    const ta = a.querySelectorAll('td')[col]?.textContent.trim() || '';
+    const tb = b.querySelectorAll('td')[col]?.textContent.trim() || '';
+    return ta.localeCompare(tb, 'vi') * sortDir;
+  });
+  curPage = 1; render();
+}
+
+function render() {
+  const start = (curPage-1)*PAGE, end = start+PAGE;
+  allRows.forEach(r => r.style.display = 'none');
+  filtered.slice(start, end).forEach(r => r.style.display = '');
+  renderPaging();
+}
+
+function renderPaging() {
+  const bar = document.getElementById('paging-bar');
+  if (!bar) return;
+  const total = Math.ceil(filtered.length / PAGE);
+  if (total <= 1) { bar.innerHTML = ''; return; }
+  let h = `<span style="font-size:13px;color:#64748b;margin-right:4px">Trang ${curPage}/${total} (${filtered.length} HĐ)</span>`;
+  if (curPage > 1) h += `<button onclick="go(1)">«</button><button onclick="go(${curPage-1})">‹</button>`;
+  const s = Math.max(1,curPage-2), e = Math.min(total,curPage+2);
+  for (let i=s;i<=e;i++) h += `<button onclick="go(${i})" class="${i===curPage?'ap':''}">${i}</button>`;
+  if (curPage < total) h += `<button onclick="go(${curPage+1})">›</button><button onclick="go(${total})">»</button>`;
+  bar.innerHTML = h;
+}
+
+function go(p) {
+  curPage = p; render();
+  document.getElementById('inv-table')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function exportCSV() {
+  const hdr = ['#','Bệnh nhân','Bác sĩ','Chuyên khoa','Ngày khám','Giờ','Số tiền (đ)','Trạng thái','Hình thức TT','Ngày TT'];
+  const statusMap = {da_thanh_toan:'Đã thanh toán',cho_thanh_toan:'Chờ thanh toán',da_huy:'Đã hủy'};
+  const rows = filtered.map(r => {
+    const td = r.querySelectorAll('td');
+    return [
+      td[0].textContent.trim(),
+      td[1].textContent.trim(),
+      r.dataset.bs,
+      td[2].querySelector('span:last-child')?.textContent.trim()||'',
+      r.dataset.ngay,
+      td[3].querySelector('span')?.textContent.trim()||'',
+      r.dataset.amount,
+      statusMap[r.dataset.status]||r.dataset.status,
+      td[6].textContent.trim(),
+      td[7].textContent.trim()
+    ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+  const csv = '\uFEFF'+[hdr.join(','),...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `hoa_don_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}

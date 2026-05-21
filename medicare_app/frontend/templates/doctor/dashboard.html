@@ -1,0 +1,324 @@
+{% extends 'shared/base.html' %}
+{% block title %}Dashboard Bác Sĩ - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="#">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Lý Bác Sĩ</div><div style="font-size:11px;color:#64748b">Bác sĩ</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Bác sĩ</div></div>
+    <a href="{{ url_for('web_public.logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="page-header"><h1>Dashboard Bác Sĩ</h1><p>Quản lý lịch khám, bệnh án và hóa đơn</p></div>
+
+  <!-- Tab navigation -->
+  <div class="tabs" id="mainTabs">
+    <a class="tab active" onclick="showTab('tab-lich-kham')" href="#">📅 Lịch khám</a>
+    <a class="tab" onclick="showTab('tab-benh-an')" href="#">📋 Bệnh án <span style="background:#7c3aed;color:#fff;padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px">{{ benh_ans|length }}</span></a>
+    <a class="tab" onclick="showTab('tab-hoa-don')" href="#">🧾 Hóa đơn
+      {% if invoices_pending %}<span style="background:#ea580c;color:#fff;padding:2px 7px;border-radius:10px;font-size:11px;margin-left:4px">{{ invoices_pending|length }}</span>{% endif %}
+    </a>
+  </div>
+
+  <!-- TAB: LỊCH KHÁM -->
+  <div id="tab-lich-kham">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">Hôm nay</div><div class="value value-blue">{{ today_count }}</div></div>
+      <div class="stat-card"><div class="label">Chờ xác nhận</div><div class="value value-orange">{{ pending|length }}</div></div>
+      <div class="stat-card"><div class="label">Sắp tới</div><div class="value value-purple">{{ upcoming|length }}</div></div>
+      <div class="stat-card"><div class="label">Tổng lịch khám</div><div class="value value-default">{{ appointments|length }}</div></div>
+    </div>
+    {% if pending %}
+    <div class="card" style="border:1.5px solid #fef3c7;background:#fffbeb">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;color:#92400e">⏳ Lịch khám chờ xác nhận</h3>
+      {% for a in pending %}
+      <div class="appt-card" style="border-color:#fde68a">
+        <div class="doctor" style="margin-bottom:10px">
+          <span style="font-size:16px;font-weight:700">👤 {{ a.ten_bn }}</span>
+          <span class="badge badge-pending">⏳ Chờ xác nhận</span>
+        </div>
+        <div class="meta">
+          <span>📅 {{ a.ngay_kham }}</span>
+          <span>🕐 {{ a.gio_kham }}</span>
+          <span>📞 {{ a.so_dien_thoai or 'N/A' }}</span>
+          <span>✉️ {{ a.email or 'N/A' }}</span>
+          <span style="color:#16a34a;font-weight:600">💵 {{ "{:,.0f}".format(a.phi_kham) }}đ</span>
+        </div>
+        {% if a.ly_do %}<div style="background:#fff;padding:10px 14px;border-radius:8px;margin-top:10px;font-size:13px"><strong>Lý do:</strong> {{ a.ly_do }}</div>{% endif %}
+        <div class="actions" style="margin-top:14px">
+          <form method="POST" action="{{ url_for('web_doctor.confirm_appointment', lk_id=a.id) }}" style="display:flex;flex-direction:column;gap:8px;width:100%">
+            <input type="hidden" name="action" id="action-{{ a.id }}">
+            <div style="display:flex;gap:8px">
+              <input class="form-control btn-sm" name="ghi_chu" placeholder="Ghi chú (tuỳ chọn)" style="flex:1;padding:8px 12px">
+              <button type="submit" class="btn btn-success" onclick="document.getElementById('action-{{ a.id }}').value='confirm'">✅ Xác nhận</button>
+              <button type="submit" class="btn btn-danger" onclick="document.getElementById('action-{{ a.id }}').value='reject';return checkLyDoHuy(this)">❌ Từ chối</button>
+            </div>
+            <div id="ly-do-huy-{{ a.id }}" style="display:none">
+              <input class="form-control btn-sm" name="ly_do_huy" placeholder="⚠️ Lý do từ chối/hủy (bắt buộc khi từ chối)" style="width:100%;padding:8px 12px;border-color:#ef4444">
+            </div>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="card">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">📋 Tất cả lịch khám</h3>
+      {% if appointments %}
+      <table>
+        <thead><tr><th>Bệnh nhân</th><th>Ngày khám</th><th>Giờ</th><th>Phí khám</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+        <tbody>
+        {% for a in appointments %}
+        <tr>
+          <td><strong>{{ a.ten_bn }}</strong><br><span style="font-size:12px;color:#64748b">{{ a.so_dien_thoai }}</span></td>
+          <td>{{ a.ngay_kham }}</td>
+          <td>{{ a.gio_kham }}</td>
+          <td style="color:#16a34a;font-weight:600">{{ "{:,.0f}".format(a.phi_kham) }}đ</td>
+          <td>
+            {% if a.trang_thai == 'cho_xac_nhan' %}<span class="badge badge-pending">Chờ XN</span>
+            {% elif a.trang_thai == 'da_xac_nhan' %}<span class="badge badge-confirmed">Đã XN</span>
+            {% elif a.trang_thai == 'hoan_thanh' %}<span class="badge badge-completed">Hoàn thành</span>
+            {% else %}<span class="badge badge-cancelled">Đã hủy</span>{% endif %}
+          </td>
+          <td>
+            {% if a.trang_thai == 'da_xac_nhan' %}
+            <a href="{{ url_for('web_doctor.medical_record', lk_id=a.id) }}" class="btn btn-success btn-sm">📝 Ghi bệnh án</a>
+            {% elif a.trang_thai == 'hoan_thanh' %}
+            <a href="{{ url_for('web_doctor.medical_record', lk_id=a.id) }}" class="btn btn-outline btn-sm">📝 Xem/Sửa BA</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><div class="icon">📅</div><p>Chưa có lịch khám nào</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- TAB: BỆNH ÁN -->
+  <div id="tab-benh-an" style="display:none">
+    <div class="card">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">📋 Hồ sơ bệnh án đã viết</h3>
+      {% if benh_ans %}
+      <table>
+        <thead><tr><th>Bệnh nhân</th><th>Ngày khám</th><th>Triệu chứng</th><th>Chẩn đoán</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+        <tbody>
+        {% for ba in benh_ans %}
+        <tr>
+          <td><strong>{{ ba.ten_bn }}</strong></td>
+          <td>{{ ba.ngay_kham }}<br><span style="font-size:12px;color:#64748b">{{ ba.gio_kham }}</span></td>
+          <td style="max-width:180px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ ba.trieu_chung or '-' }}</span></td>
+          <td style="max-width:180px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ ba.chan_doan or '-' }}</span></td>
+          <td style="font-size:12px;color:#64748b">{{ ba.ngay_tao[:16] if ba.ngay_tao else '-' }}</td>
+          <td>
+            <a href="{{ url_for('web_doctor.medical_record', lk_id=ba.lich_kham_id) }}" class="btn btn-outline btn-sm">✏️ Sửa</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><div class="icon">📋</div><p>Chưa có hồ sơ bệnh án nào</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- TAB: HÓA ĐƠN -->
+  <div id="tab-hoa-don" style="display:none">
+    {% if invoices_pending %}
+    <div class="card" style="border:1.5px solid #fed7aa;background:#fff7ed">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;color:#c2410c">💳 Hóa đơn chờ xác nhận thanh toán ({{ invoices_pending|length }})</h3>
+      <table>
+        <thead><tr><th>Bệnh nhân</th><th>Ngày khám</th><th>Số tiền</th><th>Phương thức</th><th>Thao tác</th></tr></thead>
+        <tbody>
+        {% for hd in invoices_pending %}
+        <tr>
+          <td><strong>{{ hd.ten_bn }}</strong></td>
+          <td>{{ hd.ngay_kham }} {{ hd.gio_kham }}</td>
+          <td style="color:#16a34a;font-weight:700;font-size:15px">{{ "{:,.0f}".format(hd.so_tien) }}đ</td>
+          <td>
+            <form method="POST" action="{{ url_for('web_doctor.confirm_payment', hd_id=hd.id) }}" style="display:flex;gap:6px;align-items:center">
+              <select name="phuong_thuc_thanh_toan" class="form-control" style="padding:6px 10px;font-size:13px;width:auto">
+                <option value="tien_mat">💵 Tiền mặt</option>
+                <option value="chuyen_khoan">🏦 Chuyển khoản</option>
+                <option value="the">💳 Thẻ</option>
+              </select>
+              <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Xác nhận đã thanh toán?')">✅ Xác nhận</button>
+            </form>
+          </td>
+          <td>
+            <a href="{{ url_for('web_doctor.invoice_detail', hd_id=hd.id) }}" class="btn btn-outline btn-sm">🔍 Chi tiết</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+        <h3 style="font-size:17px;font-weight:700;margin:0">🧾 Tất cả hóa đơn</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="bs-search-hd" placeholder="🔍 Tìm tên bệnh nhân, mã HD..." oninput="filterInvoicesBS()"
+            style="padding:8px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;width:230px;outline:none;transition:border .2s"
+            onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+          <select id="bs-filter-status" onchange="filterInvoicesBS()"
+            style="padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;background:#fff;cursor:pointer">
+            <option value="">Tất cả trạng thái</option>
+            <option value="cho_thanh_toan">⏳ Chờ thanh toán</option>
+            <option value="da_thanh_toan">✅ Đã thanh toán</option>
+            <option value="da_huy">❌ Đã hủy</option>
+          </select>
+          <input type="date" id="bs-filter-date" onchange="filterInvoicesBS()"
+            style="padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;cursor:pointer">
+          <button onclick="clearFilterBS()" style="padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc;cursor:pointer;color:#64748b">✕ Xóa lọc</button>
+        </div>
+      </div>
+      <div id="bs-no-result" style="display:none" class="empty-state"><div class="icon">🔍</div><p>Không tìm thấy hóa đơn phù hợp</p></div>
+      {% if all_invoices %}
+      <style>
+      .bs-sort-btn{cursor:pointer;user-select:none;white-space:nowrap;color:inherit}
+      .bs-sort-btn::after{content:' ↕';color:#94a3b8;font-size:10px}
+      .bs-sort-btn.asc::after{content:' ↑';color:#2563eb}
+      .bs-sort-btn.desc::after{content:' ↓';color:#2563eb}
+      #bs-invoice-table th{cursor:default}
+      </style>
+      <table id="bs-invoice-table">
+        <thead><tr>
+          <th><span class="bs-sort-btn" data-col="0">Mã HD</span></th>
+          <th><span class="bs-sort-btn" data-col="1">Bệnh nhân</span></th>
+          <th><span class="bs-sort-btn" data-col="2">Ngày khám</span></th>
+          <th><span class="bs-sort-btn" data-col="3">Số tiền</span></th>
+          <th><span class="bs-sort-btn" data-col="4">Trạng thái</span></th>
+          <th><span class="bs-sort-btn" data-col="5">Ngày TT</span></th>
+          <th>Thao tác</th>
+        </tr></thead>
+        <tbody id="bs-invoice-body">
+        {% for hd in all_invoices %}
+        <tr class="bs-invoice-row"
+            data-name="{{ hd.ten_bn | lower }}"
+            data-code="hd{{ '%06d' % hd.id }}"
+            data-status="{{ hd.trang_thai }}"
+            data-date="{{ hd.ngay_kham }}"
+            data-amount="{{ hd.so_tien }}"
+            data-ngaytt="{{ hd.ngay_thanh_toan[:10] if hd.ngay_thanh_toan else '' }}">
+          <td style="font-family:monospace;color:#64748b;font-size:12px">#HD{{ '%06d' % hd.id }}</td>
+          <td><strong>{{ hd.ten_bn }}</strong></td>
+          <td>{{ hd.ngay_kham }}</td>
+          <td style="font-weight:700;color:#1e293b">{{ "{:,.0f}".format(hd.so_tien) }}đ</td>
+          <td>
+            {% if hd.trang_thai == 'cho_thanh_toan' %}<span class="badge badge-pending">⏳ Chờ TT</span>
+            {% elif hd.trang_thai == 'da_thanh_toan' %}<span class="badge badge-completed">✅ Đã TT</span>
+            {% else %}<span class="badge badge-cancelled">❌ Đã hủy</span>{% endif %}
+          </td>
+          <td style="font-size:12px;color:#64748b">{{ hd.ngay_thanh_toan[:10] if hd.ngay_thanh_toan else '-' }}</td>
+          <td><a href="{{ url_for('web_doctor.invoice_detail', hd_id=hd.id) }}" class="btn btn-outline btn-sm">🔍 Chi tiết</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div id="bs-count" style="margin-top:10px;font-size:13px;color:#64748b"></div>
+      {% else %}
+      <div class="empty-state"><div class="icon">🧾</div><p>Chưa có hóa đơn nào</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+/* ===== SẮP XẾP HÓA ĐƠN BÁC SĨ ===== */
+let bsSortCol = -1, bsSortDir = 1;
+function doSortBS(col) {
+  if (bsSortCol === col) bsSortDir *= -1;
+  else { bsSortCol = col; bsSortDir = 1; }
+  document.querySelectorAll('.bs-sort-btn').forEach(b => {
+    b.classList.remove('asc','desc');
+    if (parseInt(b.dataset.col) === col) b.classList.add(bsSortDir === 1 ? 'asc' : 'desc');
+  });
+  const tbody = document.getElementById('bs-invoice-body');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('.bs-invoice-row'));
+  rows.sort((a, b) => {
+    if (col === 3) return (parseInt(a.dataset.amount||0) - parseInt(b.dataset.amount||0)) * bsSortDir;
+    if (col === 2) return a.dataset.date.localeCompare(b.dataset.date) * bsSortDir;
+    if (col === 5) return a.dataset.ngaytt.localeCompare(b.dataset.ngaytt) * bsSortDir;
+    if (col === 4) return a.dataset.status.localeCompare(b.dataset.status) * bsSortDir;
+    const ta = a.querySelectorAll('td')[col]?.textContent.trim() || '';
+    const tb = b.querySelectorAll('td')[col]?.textContent.trim() || '';
+    return ta.localeCompare(tb, 'vi') * bsSortDir;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  filterInvoicesBS();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.bs-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => doSortBS(parseInt(btn.dataset.col)));
+  });
+});
+/* ===== LỌC HÓA ĐƠN BÁC SĨ ===== */
+function filterInvoicesBS() {
+  const q = (document.getElementById('bs-search-hd').value || '').toLowerCase().trim();
+  const st = document.getElementById('bs-filter-status').value;
+  const dt = document.getElementById('bs-filter-date').value;
+  const rows = document.querySelectorAll('.bs-invoice-row');
+  let visible = 0;
+  rows.forEach(row => {
+    const matchText = !q || row.dataset.name.includes(q) || row.dataset.code.includes(q);
+    const matchStatus = !st || row.dataset.status === st;
+    const matchDate = !dt || row.dataset.date === dt;
+    const show = matchText && matchStatus && matchDate;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const total = rows.length;
+  const countEl = document.getElementById('bs-count');
+  if (countEl) countEl.textContent = (q || st || dt) ? `Hiển thị ${visible} / ${total} hóa đơn` : '';
+  const noResult = document.getElementById('bs-no-result');
+  const table = document.getElementById('bs-invoice-table');
+  if (noResult) noResult.style.display = visible === 0 && total > 0 ? '' : 'none';
+  if (table) table.style.display = visible === 0 && total > 0 ? 'none' : '';
+}
+function clearFilterBS() {
+  document.getElementById('bs-search-hd').value = '';
+  document.getElementById('bs-filter-status').value = '';
+  document.getElementById('bs-filter-date').value = '';
+  filterInvoicesBS();
+}
+function showTab(id) {
+  ['tab-lich-kham','tab-benh-an','tab-hoa-don'].forEach(t => {
+    document.getElementById(t).style.display = t === id ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['tab-lich-kham','tab-benh-an','tab-hoa-don'][i] === id);
+  });
+  return false;
+}
+function checkLyDoHuy(btn) {
+  // Find the parent form and show ly_do_huy input
+  const form = btn.closest('form');
+  const actionInput = form.querySelector('[id^="action-"]');
+  const lkId = actionInput.id.replace('action-','');
+  const lyDoDiv = document.getElementById('ly-do-huy-' + lkId);
+  const lyDoInput = lyDoDiv ? lyDoDiv.querySelector('input') : null;
+  if (lyDoDiv && lyDoDiv.style.display === 'none') {
+    lyDoDiv.style.display = 'block';
+    lyDoInput.focus();
+    return false; // Show field first, don't submit yet
+  }
+  if (lyDoInput && !lyDoInput.value.trim()) {
+    lyDoInput.style.borderColor = '#ef4444';
+    lyDoInput.placeholder = '❗ Vui lòng nhập lý do từ chối!';
+    lyDoInput.focus();
+    return false;
+  }
+  return confirm('Xác nhận từ chối/hủy lịch khám này?');
+}
+</script>
+{% endblock %}

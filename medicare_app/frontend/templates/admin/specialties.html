@@ -1,0 +1,63 @@
+{% extends 'shared/base.html' %}
+{% block title %}Quản lý Chuyên Khoa - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('web_admin.dashboard') }}">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Quản Trị</div><div style="font-size:11px;color:#64748b">Quản trị viên</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Quản trị viên</div></div>
+    <a href="{{ url_for('web_public.logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="tabs">
+    <a class="tab" href="{{ url_for('web_admin.dashboard') }}">🏠 Tổng quan</a>
+    <a class="tab" href="{{ url_for('web_admin.doctors') }}">👨‍⚕️ Bác sĩ</a>
+    <a class="tab" href="{{ url_for('web_admin.patients') }}">👥 Bệnh nhân</a>
+    <a class="tab active" href="{{ url_for('web_admin.specialties') }}">🏥 Chuyên khoa</a>
+    <a class="tab" href="{{ url_for('web_admin.appointments') }}">📅 Lịch khám</a>
+    <a class="tab" href="{{ url_for('web_admin.revenue') }}">💰 Doanh thu</a>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <h2 style="font-size:20px;font-weight:700">Danh sách Chuyên Khoa</h2>
+    <button onclick="document.getElementById('addSpecModal').classList.add('active')" class="btn btn-primary">+ Thêm chuyên khoa</button>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>Tên chuyên khoa</th><th>Mô tả</th><th>Số bác sĩ</th><th>Thao tác</th></tr></thead>
+      <tbody>
+      {% for sp in specialties %}
+      <tr>
+        <td><strong>{{ sp.ten_chuyen_khoa }}</strong></td>
+        <td>{{ sp.mo_ta or '-' }}</td>
+        <td><span class="badge badge-confirmed">{{ sp.so_bac_si }} bác sĩ</span></td>
+        <td>
+          <form method="POST" action="{{ url_for('web_admin.delete_specialty', ck_id=sp.id) }}" onsubmit="return confirm('Xóa chuyên khoa này?')">
+            <button type="submit" class="btn btn-danger btn-sm" {% if sp.so_bac_si > 0 %}disabled title="Còn bác sĩ, không thể xóa"{% endif %}>Xóa</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="modal-overlay" id="addSpecModal" onclick="if(event.target===this)this.classList.remove('active')">
+  <div class="modal">
+    <h3>🏥 Thêm Chuyên Khoa Mới</h3>
+    <form method="POST" action="{{ url_for('web_admin.add_specialty') }}">
+      <div class="form-group" style="margin-bottom:16px"><label>Tên chuyên khoa *</label><input class="form-control" name="ten_chuyen_khoa" required></div>
+      <div class="form-group" style="margin-bottom:20px"><label>Mô tả</label><textarea class="form-control" name="mo_ta" rows="3" style="padding:11px 14px;resize:vertical"></textarea></div>
+      <div style="display:flex;gap:10px">
+        <button type="button" onclick="document.getElementById('addSpecModal').classList.remove('active')" class="btn btn-outline" style="flex:1">Hủy</button>
+        <button type="submit" class="btn btn-primary" style="flex:2">Thêm chuyên khoa</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends 'shared/base.html' %}
+{% block title %}Đặt lịch khám - MediCare{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('web_patient.dashboard') }}">
+    <div class="logo">🏥</div>
+    <div><div style="font-size:16px;font-weight:700;color:#1e293b">Hệ thống Đặt Lịch Khám</div><div style="font-size:11px;color:#64748b">Bệnh nhân</div></div>
+  </a>
+  <div class="navbar-right">
+    <div class="navbar-user"><div class="username">{{ session.username }}</div><div class="role">Bệnh nhân</div></div>
+    <a href="{{ url_for('web_public.logout') }}" class="btn-logout">→ Đăng xuất</a>
+  </div>
+</nav>
+<div class="container" style="max-width:720px">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <div class="page-header">
+    <h1>Đặt lịch khám mới</h1>
+    <p>Chọn bác sĩ và thời gian phù hợp với bạn</p>
+  </div>
+  <div class="card">
+    <form method="POST">
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-group label">Chuyên khoa</label>
+        <select class="form-control" id="chuyen_khoa" onchange="filterDoctors()">
+          <option value="">-- Tất cả chuyên khoa --</option>
+          {% for sp in specialties %}
+          <option value="{{ sp.id }}">{{ sp.ten_chuyen_khoa }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:18px">
+        <label>Bác sĩ *</label>
+        <select class="form-control" name="bac_si_id" id="bac_si" required onchange="showDoctorInfo()">
+          <option value="">-- Chọn bác sĩ --</option>
+          {% for d in doctors %}
+          <option value="{{ d.id }}" data-ck="{{ d.chuyen_khoa_id }}" data-phi="{{ d.phi_kham }}" data-ck-name="{{ d.ten_chuyen_khoa }}" data-exp="{{ d.kinh_nghiem or '' }}">
+            {{ d.ho_ten }} - {{ d.ten_chuyen_khoa }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="doctor-info" style="display:none;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:16px;margin-bottom:18px">
+        <div style="font-weight:700;color:#0369a1;margin-bottom:8px" id="di-name"></div>
+        <div style="font-size:13px;color:#0369a1;display:flex;gap:20px;flex-wrap:wrap">
+          <span>🏥 <span id="di-ck"></span></span>
+          <span>⏱️ <span id="di-exp"></span></span>
+          <span>💵 Phí khám: <strong id="di-phi"></strong></span>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-bottom:18px">
+        <div class="form-group">
+          <label>Ngày khám *</label>
+          <input class="form-control" type="date" name="ngay_kham" id="ngay_kham" required min="{{ today }}">
+        </div>
+        <div class="form-group">
+          <label>Giờ khám *</label>
+          <select class="form-control" name="gio_kham" id="gio_kham" required>
+            <option value="">-- Chọn giờ --</option>
+            {% for h in ['07:00','08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'] %}
+            <option value="{{ h }}">{{ h }}</option>
+            {% endfor %}
+          </select>
+          <div id="slot-note" style="font-size:12px;color:#64748b;margin-top:5px;display:none">⚠️ Các giờ bị mờ đã có người đặt</div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:24px">
+        <label>Lý do khám</label>
+        <textarea class="form-control" name="ly_do" rows="3" placeholder="Mô tả triệu chứng hoặc lý do khám..." style="resize:vertical;padding:11px 14px"></textarea>
+      </div>
+      <div style="display:flex;gap:12px">
+        <a href="{{ url_for('web_patient.dashboard') }}" class="btn btn-outline" style="flex:1;justify-content:center">← Quay lại</a>
+        <button type="submit" class="btn btn-primary" style="flex:2;justify-content:center">📅 Xác nhận đặt lịch</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('ngay_kham').min = today;
+
+function filterDoctors(){
+  const ck = document.getElementById('chuyen_khoa').value;
+  const opts = document.querySelectorAll('#bac_si option');
+  opts.forEach(o=>{
+    if(!o.value) return;
+    o.style.display = (!ck || o.dataset.ck==ck) ? '' : 'none';
+  });
+  document.getElementById('bac_si').value = '';
+  document.getElementById('doctor-info').style.display = 'none';
+  updateBookedSlots();
+}
+
+function showDoctorInfo(){
+  const sel = document.getElementById('bac_si');
+  const opt = sel.options[sel.selectedIndex];
+  const info = document.getElementById('doctor-info');
+  if(opt.value){
+    document.getElementById('di-name').textContent = opt.text.split(' - ')[0];
+    document.getElementById('di-ck').textContent = opt.dataset.ckName;
+    document.getElementById('di-exp').textContent = opt.dataset.exp || 'Chưa cập nhật';
+    document.getElementById('di-phi').textContent = parseInt(opt.dataset.phi).toLocaleString('vi-VN') + 'đ';
+    info.style.display = 'block';
+  } else {
+    info.style.display = 'none';
+  }
+  updateBookedSlots();
+}
+
+document.getElementById('ngay_kham').addEventListener('change', updateBookedSlots);
+
+async function updateBookedSlots(){
+  const bacSiId = document.getElementById('bac_si').value;
+  const ngayKham = document.getElementById('ngay_kham').value;
+  const gioSelect = document.getElementById('gio_kham');
+  const note = document.getElementById('slot-note');
+
+  // Reset all options
+  Array.from(gioSelect.options).forEach(o => {
+    o.disabled = false;
+    o.textContent = o.value || o.textContent;
+    if(o.value) o.textContent = o.value;
+    o.style.color = '';
+    o.style.fontWeight = '';
+    o.style.background = '';
+  });
+
+  if(!bacSiId || !ngayKham){
+    note.style.display = 'none';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/booked-slots?bac_si_id=${bacSiId}&ngay_kham=${ngayKham}`);
+    const booked = await res.json();
+    if(booked.length === 0){ note.style.display = 'none'; return; }
+
+    note.style.display = 'block';
+    Array.from(gioSelect.options).forEach(o => {
+      if(!o.value) return;
+      if(booked.includes(o.value)){
+        o.disabled = true;
+        o.textContent = '🔴 ' + o.value + ' — Đã có người đặt';
+        o.style.color = '#dc2626';
+        o.style.fontWeight = '700';
+        o.style.background = '#fee2e2';
+      }
+    });
+    if(gioSelect.value && booked.includes(gioSelect.value)){
+      gioSelect.value = '';
+    }
+  } catch(e){ console.error(e); }
+}
+</script>
+{% endblock %}
